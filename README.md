@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ## Run locally
 
 ```bash
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 Open:
@@ -97,28 +97,64 @@ You can use `annotated_image_data_url` directly inside an `<img>` tag or in your
 }
 ```
 
-## Deploy on Render
+## Deploy on Azure
 
-Render's current FastAPI docs show a Python web service with:
+This project is now ready for Azure Container Apps using the included [`Dockerfile`](/c:/Users/ROMIL/Desktop/garbage-detection-api2/Dockerfile) and [`.dockerignore`](/c:/Users/ROMIL/Desktop/garbage-detection-api2/.dockerignore).
 
-- Build command: `pip install -r requirements.txt`
-- Start command: `uvicorn ... --host 0.0.0.0 --port $PORT`
+### Why Azure Container Apps
 
-This repo already includes [`render.yaml`](/c:/Users/ROMIL/Desktop/garbage-detection-api2/render.yaml) with the correct settings and pins Python to `3.12.2` so Render matches your local environment more closely.
+- Better fit for a YOLO API than a small free web instance
+- Supports custom containers
+- Works well with FastAPI
+- Easier to scale memory for `torch` and `ultralytics`
 
-### Steps
+### One-time setup
 
-1. Push this project to GitHub.
-2. Open Render Dashboard.
-3. Click `New` -> `Blueprint`.
-4. Connect your GitHub repository.
-5. Render will read `render.yaml` automatically.
-6. After deploy finishes, open:
-   - `https://YOUR-SERVICE.onrender.com/docs`
+Install and sign in to Azure CLI:
 
-### Important note about speed
+```bash
+az login
+az extension add --name containerapp --upgrade
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.OperationalInsights
+```
 
-Render free services can spin down after inactivity, which makes the first request slower. For faster repeated responses, keep the service warm with traffic or use a paid plan.
+### Deploy from this folder
+
+Run these commands from the project root:
+
+```bash
+az group create --name garbage-detection-rg --location centralindia
+az containerapp up \
+  --name garbage-detection-api \
+  --resource-group garbage-detection-rg \
+  --location centralindia \
+  --ingress external \
+  --target-port 8000 \
+  --env-vars ALLOWED_ORIGINS=* \
+  --source .
+```
+
+Azure will build the container from your local source and deploy it.
+
+### Recommended Azure settings
+
+After the first deploy, set your container resources high enough for YOLO inference:
+
+- CPU: `1`
+- Memory: `2Gi` or `4Gi`
+
+### Test after deployment
+
+Open:
+
+- `https://YOUR-AZURE-URL/docs`
+
+Use:
+
+- `POST /analyze-waste`
+- upload `file`
+- set `include_annotated_image=true` if you want the output image with bounding boxes
 
 ## Connect your application
 
@@ -126,7 +162,7 @@ Frontend or mobile app flow:
 
 1. User selects an image.
 2. App sends a `multipart/form-data` POST request to:
-   - `https://YOUR-SERVICE.onrender.com/analyze-waste`
+   - `https://YOUR-AZURE-URL/analyze-waste`
 3. App reads JSON response.
 4. Show:
    - `detections`
@@ -141,7 +177,7 @@ const formData = new FormData();
 formData.append("file", imageFile);
 formData.append("include_annotated_image", "true");
 
-const response = await fetch("https://YOUR-SERVICE.onrender.com/analyze-waste", {
+const response = await fetch("https://YOUR-AZURE-URL/analyze-waste", {
   method: "POST",
   body: formData,
 });
@@ -157,7 +193,7 @@ document.getElementById("result-image").src = data.annotated_image_data_url;
 ```dart
 final request = http.MultipartRequest(
   'POST',
-  Uri.parse('https://YOUR-SERVICE.onrender.com/analyze-waste'),
+  Uri.parse('https://YOUR-AZURE-URL/analyze-waste'),
 );
 
 request.fields['include_annotated_image'] = 'true';
@@ -172,14 +208,9 @@ final base64String = imageDataUrl.split(',').last;
 final imageBytes = base64Decode(base64String);
 ```
 
-## Official Render references
+### Why this API works well on Azure
 
-- Render FastAPI deploy docs: https://render.com/docs/deploy-fastapi
-- Render web services docs: https://render.com/docs/web-services
-- Render Python version docs: https://render.com/docs/python-version
-
-## Render start command
-
-```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
-```
+- The YOLO model loads once and stays in memory
+- `/health` is available for checks
+- `annotated_image_data_url` can be shown directly in your app
+- Ultralytics and matplotlib config paths are set to `/tmp`, which is safer for cloud containers

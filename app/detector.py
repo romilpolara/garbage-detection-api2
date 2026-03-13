@@ -1,14 +1,25 @@
 import base64
 import io
 import os
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from PIL import Image
-from ultralytics import YOLO
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+YOLO_CONFIG_DIR = Path(os.getenv("YOLO_CONFIG_DIR", Path(tempfile.gettempdir()) / "ultralytics"))
+MPL_CONFIG_DIR = Path(os.getenv("MPLCONFIGDIR", Path(tempfile.gettempdir()) / "matplotlib"))
+
+YOLO_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+MPL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("YOLO_CONFIG_DIR", str(YOLO_CONFIG_DIR))
+os.environ.setdefault("MPLCONFIGDIR", str(MPL_CONFIG_DIR))
+
+from ultralytics import YOLO
+
+
 MODEL_PATH = Path(os.getenv("MODEL_PATH", BASE_DIR / "weights" / "best.pt"))
 _model: Optional[YOLO] = None
 
